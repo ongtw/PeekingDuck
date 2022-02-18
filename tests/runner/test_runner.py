@@ -146,6 +146,20 @@ def runner_with_nodes(test_input_node, test_node_end):
     return test_runner
 
 
+@pytest.fixture
+def runner_with_nodes_endless(test_input_node):
+    setup()
+    instantiated_nodes = [test_input_node]
+    test_runner_endless = Runner(
+        run_config_path=RUN_CONFIG_PATH,
+        config_updates_cli=CONFIG_UPDATES_CLI,
+        custom_nodes_parent_subdir=CUSTOM_NODES_DIR,
+        nodes=instantiated_nodes,
+    )
+
+    return test_runner_endless
+
+
 @pytest.mark.usefixtures("tmp_dir")
 class TestRunner:
     @pytest.mark.parametrize("runner", [None, []], indirect=True)
@@ -234,3 +248,22 @@ class TestRunner:
 
         for idx, (node, _) in enumerate(node_list):
             assert node == NODES["nodes"][idx]
+
+    def test_callback(self, runner_with_nodes_endless):
+        print("** test_callback **")
+        _count = 0
+
+        def the_callback(data_pool):
+            nonlocal _count
+            _count += 1
+            print(f"_count={_count}")
+            if _count >= 5:
+                print("    quitting pipeline...")
+                data_pool["pipeline_end"] = True
+
+        cid = runner_with_nodes_endless.add_callback(the_callback)
+        runner_with_nodes_endless.run()
+
+        # DOTW: pipeline stops one iteration later due to code logic in
+        #       runner.py lines 104-107
+        assert _count == 6

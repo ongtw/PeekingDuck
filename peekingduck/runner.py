@@ -19,9 +19,10 @@ Main engine for PeekingDuck processes.
 import copy
 import logging
 import sys
+import uuid
 from pathlib import Path
 from time import perf_counter
-from typing import List
+from typing import Any, Callable, Dict, List
 
 from peekingduck.declarative_loader import DeclarativeLoader, NodeList
 from peekingduck.pipeline.nodes.node import AbstractNode
@@ -90,6 +91,7 @@ class Runner:
         else:
             self.num_iter = num_iter
             self.logger.info(f"Run pipeline for {num_iter} iterations")
+        self.callback_functions = {}
 
     def run(self) -> None:  # pylint: disable=too-many-branches
         """execute single or continuous inference"""
@@ -121,12 +123,16 @@ class Runner:
 
                 outputs = node.run(inputs)
                 self.pipeline.data.update(outputs)
+
                 if num_iter == 0:
                     node_end_time = perf_counter()
                     self.logger.debug(
                         f"{node.name} setup time = {node_end_time - node_start_time:.2f} sec"
                     )
             num_iter += 1
+            if self.callback_functions:
+                for _, callback_fn in self.callback_functions.items():
+                    callback_fn(self.pipeline.data)
             if self.num_iter > 0 and num_iter >= self.num_iter:
                 self.logger.info(f"Stopping pipeline after {num_iter} iterations")
                 break
@@ -143,3 +149,28 @@ class Runner:
             (:obj:`Dict`): Run configurations being used by runner.
         """
         return self.node_loader.node_list
+
+    def add_callback(self, callback_fn: Callable[[Dict], None]) -> int:
+        """Adds callback function to be activated in each pipeline iteration.
+
+        Args:
+            callback_fn (_type_): The callback function,
+                                  accepts Data Pool as argument.
+
+        Returns:
+            int: Callback function ID
+        """
+        cid = uuid.uuid1().int
+        self.callback_functions[cid] = callback_fn
+        return cid
+
+    def remove_callback(self, callback_fn_id: int) -> None:
+        """Removes callback function associated with given ID.
+
+        Args:
+            callback_fn_id (int): The callback function ID.
+        """
+        if callback_fn_id in self.callback_functions:
+            self.callback_functions.pop(callback_fn_id)
+        else:
+            self.logger.error(f"Callback function ID {callback_fn_id} does not exist")
