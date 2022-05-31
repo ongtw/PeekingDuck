@@ -33,6 +33,7 @@ from peekingduck.utils.create_node_helper import obj_det_change_class_name_to_id
 from peekingduck.utils.deprecation import deprecate
 
 PEEKINGDUCK_NODE_TYPES = ["input", "augment", "model", "draw", "dabble", "output"]
+PEEKINGDUCK_NODE_IGNORE = ["description"]
 
 
 class DeclarativeLoader:  # pylint: disable=too-few-public-methods
@@ -152,9 +153,11 @@ class DeclarativeLoader:  # pylint: disable=too-few-public-methods
         instantiated_nodes = []
 
         for node_str, config_updates_yml in self.node_list:
-            node_str_split = node_str.split(".")
+            if node_str in PEEKINGDUCK_NODE_IGNORE:
+                continue
 
             self.logger.info(f"Initializing {node_str} node...")
+            node_str_split = node_str.split(".")
 
             if len(node_str_split) == 3:
                 # convert windows/linux filepath to a module path

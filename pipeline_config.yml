@@ -1,4 +1,7 @@
 nodes:
+- description:
+    This field is reserved to provide information about this pipeline field and
+    explain what it does.
 - input.visual:
     source: https://storage.googleapis.com/peekingduck/videos/wave.mp4
 - model.posenet
