@@ -13,7 +13,7 @@
 # limitations under the License.
 
 """
-Implement PeekingDuck Viewer
+Implement PeekingDuck Player
 
 Todo:
     - handle scenario whereby input image is larger than display widget size,
@@ -33,6 +33,7 @@ import numpy as np
 from PIL import ImageTk, Image
 from peekingduck.declarative_loader import DeclarativeLoader
 from peekingduck.pipeline.pipeline import Pipeline
+from peekingduck.player.playlist import PlayList
 
 ####################
 # Globals
@@ -48,7 +49,7 @@ KEY_STATE_MAP = {  # Tkinter keyboard modifiers
     16: "alt",
     32: "keypad",
 }
-LOGO = "peekingduck/viewer/AISG_Logo_1536x290.png"
+LOGO = "peekingduck/player/AISG_Logo_1536x290.png"
 WIN_HEIGHT = 800
 WIN_WIDTH = 1280
 ZOOM_TEXT = ["0.5x", "0.75x", "1x", "1.25x", "1.5x", "2x", "2.5x", "3x"]
@@ -88,7 +89,8 @@ def get_keyboard_modifier(state: int) -> str:
     alt = (state & 0x8) != 0 or (state & 0x80) != 0
     shift = (state & 0x1) != 0
     res = f"{'ctrl' if ctrl else ''}{'-alt' if alt else ''}{'-shift' if shift else ''}"
-    return res[1:] if res[0] == "-" else res
+    # print(f"res={type(res)} {len(res)} '{res}'")
+    return "" if len(res) == 0 else res[1:] if res[0] == "-" else res
 
 
 def get_keyboard_char(char: str, keysym: str) -> str:
@@ -109,8 +111,8 @@ def get_keyboard_char(char: str, keysym: str) -> str:
     return res
 
 
-class Viewer:  # pylint: disable=too-many-instance-attributes
-    """Implement PeekingDuck Viewer class"""
+class Player:  # pylint: disable=too-many-instance-attributes
+    """Implement PeekingDuck Player class"""
 
     def __init__(
         self,
@@ -140,7 +142,7 @@ class Viewer:  # pylint: disable=too-many-instance-attributes
         }
 
     def run(self) -> None:
-        """Main method to setup Viewer and run Tk event loop"""
+        """Main method to setup Player and run Tk event loop"""
         self.logger.info(f"cwd={Path.cwd()}")
         self.logger.info(f"pipeline={self._pipeline_path}")
         logo_path = Path(LOGO)
@@ -166,10 +168,10 @@ class Viewer:  # pylint: disable=too-many-instance-attributes
     #
     ####################
     def _create_window(self) -> None:
-        """Create the PeekingDuck viewer window"""
+        """Create the PeekingDuck Player window"""
         root = tk.Tk()
         root.wm_protocol("WM_DELETE_WINDOW", self.on_exit)
-        root.title("PeekingDuck Viewer")
+        root.title("PeekingDuck Player")
         root.geometry(f"{WIN_WIDTH}x{WIN_HEIGHT}")
         root.update()  # force update without mainloop() to get correct size
         root.minsize(root.winfo_width(), root.winfo_height())
@@ -195,7 +197,7 @@ class Viewer:  # pylint: disable=too-many-instance-attributes
         for i in range(2):
             dummy = tk.Label(header_frm, text="")
             dummy.grid(row=0, column=i + 2, sticky="nsew")
-        lbl = tk.Label(header_frm, text="PeekingDuck Viewer Header")
+        lbl = tk.Label(header_frm, text="PeekingDuck Player Header")
         lbl.grid(row=0, column=1, columnspan=3, sticky="nsew")
         self.tk_lbl_header = lbl
         # setup "timer" widget to do background processing later
@@ -374,8 +376,8 @@ class Viewer:  # pylint: disable=too-many-instance-attributes
                 self._keyboard_shortcuts[key]()
 
     def on_exit(self) -> None:
-        """Handle quit viewer event"""
-        self.logger.info("quitting viewer")
+        """Handle quit player event"""
+        self.logger.info("quitting player")
         self._cancel_timer_function()
         self.root.destroy()
 
@@ -552,7 +554,7 @@ class Viewer:  # pylint: disable=too-many-instance-attributes
                 node.release_resources()  # clean up nodes with threads
         self._is_pipeline_running = False
         self._enable_slider()
-        self._set_viewer_state_to_stop()
+        self._set_player_state_to_stop()
         self._set_header_stop()
 
     def _run_pipeline_one_iteration(self) -> None:  # pylint: disable=too-many-branches
@@ -612,7 +614,7 @@ class Viewer:  # pylint: disable=too-many-instance-attributes
         )
         self._pipeline: Pipeline = self._node_loader.get_pipeline()
         self._set_header_running()
-        self._set_viewer_state_to_play()
+        self._set_player_state_to_play()
         self._is_pipeline_running = True
 
     def _stop_running_pipeline(self) -> None:
@@ -631,7 +633,7 @@ class Viewer:  # pylint: disable=too-many-instance-attributes
         if self._frame_idx + 1 >= len(self._frames):
             self._frame_idx = 0
             self._update_slider_and_show_frame()
-        self._set_viewer_state_to_play()
+        self._set_player_state_to_play()
         self._set_header_playing()
         self._do_playback()
 
@@ -645,15 +647,15 @@ class Viewer:  # pylint: disable=too-many-instance-attributes
     def _stop_playback(self) -> None:
         """Stop output playback"""
         self._is_output_playback = False
-        self._set_viewer_state_to_stop()
+        self._set_player_state_to_stop()
         self._set_header_stop()
 
-    def _set_viewer_state_to_play(self) -> None:
+    def _set_player_state_to_play(self) -> None:
         """Set self state to play for either 1) pipeline execution or 2) playback"""
         self._state = "play"
         self.tk_btn_play["text"] = "Stop"
 
-    def _set_viewer_state_to_stop(self) -> None:
+    def _set_player_state_to_stop(self) -> None:
         """Set self state to stop"""
         self._state = "stop"
         self.tk_btn_play["text"] = "Play"

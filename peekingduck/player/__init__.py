@@ -16,4 +16,4 @@
 Viewer for PeekingDuck
 """
 
-from peekingduck.viewer.viewer import Viewer
+from peekingduck.player.player import Player
