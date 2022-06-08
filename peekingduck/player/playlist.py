@@ -44,10 +44,10 @@ class PlayList:
         if 0 <= i < len(pipeline_list):
             return pipeline_list[i]
 
-        n = len(pipeline_list)
+        k = len(pipeline_list)
         self.logger.error(
             f"Error getting pipeline[{i}]: "
-            f"List has {n} pipelines, only [0] to [{n-1}] supported."
+            f"List has {k} pipelines, only [0] to [{k-1}] supported."
         )
         return ""
 
@@ -57,13 +57,18 @@ class PlayList:
         if 0 <= i < len(pipeline_list):
             pipeline_list[i] = value
         else:
-            n: int = len(pipeline_list)
+            k: int = len(pipeline_list)
             self.logger.error(
                 f"Error setting pipeline[{i}]: "
-                f"List has {n} pipelines, only [0] to [{n-1}] supported."
+                f"List has {k} pipelines, only [0] to [{k-1}] supported."
             )
 
     def read_playlist_file(self) -> List[str]:
+        """Read playlist file
+
+        Returns:
+            List[str]: contents of playlist file
+        """
         if not Path.exists(self.playlist_path):
             return []
 
@@ -71,7 +76,7 @@ class PlayList:
         return playlist
 
     def save_playlist_file(self) -> None:
-        dd = {"playlist": PlayList.pipeline_list}
-        with open(self.playlist_path, "w") as file:
-            yaml.dump(dd)
-
+        """Save playlist file"""
+        playlist_map = {"playlist": PlayList.pipeline_list}
+        with open(self.playlist_path, "w", encoding="utf8") as _:
+            yaml.dump(playlist_map)
