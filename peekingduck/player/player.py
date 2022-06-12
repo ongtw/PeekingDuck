@@ -34,6 +34,11 @@ from PIL import ImageTk, Image
 from peekingduck.declarative_loader import DeclarativeLoader
 from peekingduck.pipeline.pipeline import Pipeline
 from peekingduck.player.playlist import PlayList
+from peekingduck.player.player_utils import (
+    load_image,
+    get_keyboard_char,
+    get_keyboard_modifier,
+)
 
 ####################
 # Globals
@@ -41,75 +46,15 @@ from peekingduck.player.playlist import PlayList
 BUTTON_DELAY: int = 250  # milliseconds (0.25 of a second)
 BUTTON_REPEAT: int = int(1000 / 60)  # milliseconds (60 fps)
 FPS_60: int = int(1000 / 60)  # milliseconds per iteration
-KEY_STATE_MAP: Dict[int, str] = {  # Tkinter keyboard modifiers
-    1: "shift",
-    2: "capslock",
-    4: "ctrl",
-    8: "meta",
-    16: "alt",
-    32: "keypad",
-}
-# LOGO: str = "peekingduck/player/AISG_Logo_1536x290.png"
 LOGO: str = "peekingduck/player/PeekingDuckLogo.png"
-WIN_HEIGHT: int = 800
-WIN_WIDTH: int = 1280
-ZOOM_TEXT: List[str] = ["0.5x", "0.75x", "1x", "1.25x", "1.5x", "2x", "2.5x", "3x"]
-ZOOM_DEFAULT_IDX: int = 2
+MIN_HEIGHT: int = 480
+MIN_WIDTH: int = 640
+NUM_PLAYLIST_LINES: int = 20
+WIN_HEIGHT: int = 768
+WIN_WIDTH: int = 1024
 ZOOMS: List[float] = [0.5, 0.75, 1.0, 1.25, 1.50, 2.00, 2.50, 3.00]  # > 3x is slow!
-
-####################
-# Helper Methods
-####################
-def load_image(image_path: str, resize_pct: float = 0.25) -> ImageTk.PhotoImage:
-    """Load and resize an image, 'coz plain vanilla Tkinter doesn't support JPG, PNG
-
-    Args:
-        resize_pct (float, optional): percentage to resize. Defaults to 0.25.
-
-    Returns:
-        ImageTk.PhotoImage: the loaded image
-    """
-    img = Image.open(image_path)
-    width = int(resize_pct * img.size[0])
-    height = int(resize_pct * img.size[1])
-    resized_img = img.resize((width, height))
-    the_img = ImageTk.PhotoImage(resized_img)
-    return the_img
-
-
-def get_keyboard_modifier(state: int) -> str:
-    """Get keyboard modifier keys: support ctrl, alt/option, shift
-
-    Args:
-        state (int): Tk keypress event key state
-
-    Returns:
-        str: detected modifier keys
-    """
-    ctrl = (state & 0x4) != 0
-    alt = (state & 0x8) != 0 or (state & 0x80) != 0
-    shift = (state & 0x1) != 0
-    res = f"{'ctrl' if ctrl else ''}{'-alt' if alt else ''}{'-shift' if shift else ''}"
-    # print(f"res={type(res)} {len(res)} '{res}'")
-    return "" if len(res) == 0 else res[1:] if res[0] == "-" else res
-
-
-def get_keyboard_char(char: str, keysym: str) -> str:
-    """Get keyboard character
-
-    Args:
-        char (str): Tk keypress event character
-        keysym (str): Tk keypress event key symbol
-
-    Returns:
-        str: keyboard character
-    """
-    res = char if char else keysym
-    if keysym == "minus":
-        res = "-"
-    if keysym == "plus":
-        res = "+"
-    return res
+ZOOM_DEFAULT_IDX: int = 2
+ZOOM_TEXT: List[str] = ["0.5x", "0.75x", "1x", "1.25x", "1.5x", "2x", "2.5x", "3x"]
 
 
 class Player:  # pylint: disable=too-many-instance-attributes
@@ -127,6 +72,10 @@ class Player:  # pylint: disable=too-many-instance-attributes
         self.config_updates_cli = config_updates_cli
         self.custom_nodes_parent_path = custom_nodes_parent_subdir
         self.num_iter = num_iter
+        # init PlayList object
+        self.home_path = Path.home()
+        self.playlist = PlayList(self.home_path)
+        self.playlist.load_playlist_file()
         # for PeekingDuck pipeline run/playback
         self.frames: List[np.ndarray] = []
         self.frame_idx: int = -1
@@ -135,7 +84,7 @@ class Player:  # pylint: disable=too-many-instance-attributes
         self.is_pipeline_running: bool = False
         self.state: str = "play"  # activate auto play (cf. self.timer_function)
         self.bkgd_job: Union[None, str] = None
-        # configure keyboard shortcuts map
+        # configure keyboard shortcuts -> function map
         self.keyboard_shortcuts = {
             "z": self._zoom_reset,
             "+": self._zoom_in,
@@ -146,22 +95,23 @@ class Player:  # pylint: disable=too-many-instance-attributes
         """Main method to setup Player and run Tk event loop"""
         self.logger.info(f"cwd={Path.cwd()}")
         self.logger.info(f"pipeline={self.pipeline_path}")
-        logo_path = Path(LOGO)
-        self.logger.debug(f"logo={logo_path}, exists={logo_path.exists()}")
-        # create Tkinter window and frames
         self.gui_create_window()
-        self.gui_create_header()
-        self.gui_create_canvas()
-        self.gui_create_footer()  # need to order last two frames correctly
-        self.gui_create_progress_slider()
-        # bind event handlers
-        self.root.bind("<Key>", self.on_keypress)
+        # trap macOS cmd-Q so Player will quit correctly as expected
         if platform.system() == "Darwin":
             self.logger.info("binding macOS cmd-Q")
             self.root.createcommand("::tk::mac::Quit", self.on_exit)
         # activate internal timer function and start Tkinter event loop
         self.timer_function()
         self.root.mainloop()
+        # self.root.event_generate("<Configure>", when="tail")
+
+    def resize(self, event):
+        # "." is the self.root widget
+        # self.logger.info(f"RESIZE: {event.widget}")
+        if str(event.widget) == ".":
+            self.logger.info(
+                f"resize: widget={event.widget}, h={event.height}, w={event.width}"
+            )
 
     ####################
     #
@@ -169,123 +119,149 @@ class Player:  # pylint: disable=too-many-instance-attributes
     #
     ####################
     def gui_create_window(self) -> None:
-        """Create the PeekingDuck Player window"""
+        """Create the PeekingDuck Player Tkinter window and frames"""
         root = tk.Tk()
         root.wm_protocol("WM_DELETE_WINDOW", self.on_exit)
         root.title("PeekingDuck Player")
+        # bind event handlers
+        root.bind("<Configure>", self.resize)
+        root.bind("<Key>", self.on_keypress)
         root.geometry(f"{WIN_WIDTH}x{WIN_HEIGHT}")
         root.update()  # force update without mainloop() to get correct size
-        root.minsize(root.winfo_width(), root.winfo_height())
+        root.minsize(MIN_WIDTH, MIN_HEIGHT)
         self.root = root  # save main window
-
-    def gui_create_canvas(self) -> None:
-        """Create the main image widget for viewing PeekingDuck output"""
-        image_frm = ttk.Frame(master=self.root)
-        image_frm.pack(fill=tk.BOTH, expand=True)
-        output_image = tk.Label(image_frm)
-        output_image.pack(fill=tk.BOTH, expand=True)
-        self.tk_output_image = output_image
-        self.image_frm = image_frm  # save image frame
+        # dotw technote: need to create footer before body to ensure the footer
+        #                controls do not get covered when image is zoomed in
+        self.gui_create_header()
+        self.gui_create_footer()
+        self.gui_create_body()
 
     def gui_create_header(self) -> None:
         """Create header with logo and pipeline info text"""
-        header_frm = ttk.Frame(master=self.root)
+        header_frm = ttk.Frame(master=self.root, name="header")
         header_frm.pack(side=tk.TOP, fill=tk.X)
+        # header top padding
+        lbl = tk.Label(header_frm, text="")
+        lbl.grid(row=0, column=0)
+        # self.tk_lbl_header_padding = lbl
         # header contents
+        logo_path = Path(LOGO)
+        self.logger.debug(f"logo={logo_path}, exists={logo_path.exists()}")
         self._img_logo = load_image(LOGO, resize_pct=0.15)  # prevent python GC
         logo = tk.Label(header_frm, image=self._img_logo)
-        logo.grid(row=0, column=0, sticky="w")
+        logo.grid(row=1, column=0, sticky="nsew")
+        self.tk_logo = logo
         for i in range(2):
             dummy = tk.Label(header_frm, text="")
-            dummy.grid(row=0, column=i + 2, sticky="nsew")
-        lbl = tk.Label(header_frm, text="PeekingDuck Player Header")
-        lbl.grid(row=0, column=1, columnspan=3, sticky="nsew")
+            dummy.grid(row=1, column=i + 2, sticky="nsew")
+        lbl = tk.Label(header_frm, text="PeekingDuck Player Header", font=("arial 20"))
+        lbl.grid(row=1, column=1, columnspan=3, sticky="nsew")
         self.tk_lbl_header = lbl
-        # setup "timer" widget to do background processing later
-        lbl_timer = tk.Label(header_frm, text="timer")
-        lbl_timer.grid(row=0, column=4, sticky="e")
-        self.tk_lbl_timer = lbl_timer
+        # spacer
+        lbl_blank = tk.Label(header_frm, text="")
+        lbl_blank.grid(row=1, column=4)
         # configure expansion and uniform column sizes
         num_col, _ = header_frm.grid_size()
         for i in range(num_col):
             header_frm.grid_columnconfigure(i, weight=1, uniform="tag")
         self.header_frm = header_frm  # save header frame
 
-    def gui_create_progress_slider(self) -> None:
-        """Create frame for progress bar/slider, frame count, zoom.
-        Need to align columns with footer below.
-        Progress bar and slider overlaps on the same columns.
-        """
-        progress_frm = ttk.Frame(master=self.root)
-        progress_frm.pack(side=tk.BOTTOM, fill=tk.X)
-        lbl = tk.Label(progress_frm, text="")  # spacer
-        lbl.grid(row=0, column=0, columnspan=2, sticky="nsew")
-        # frame number
-        self.tk_lbl_frame_num = tk.Label(progress_frm, text="0")
-        self.tk_lbl_frame_num.grid(row=0, column=2, sticky="nsew")
+    def gui_create_body(self) -> None:
+        # body_frm = ttk.Frame(master=self.root, relief=tk.RIDGE, borderwidth=3)
+        body_frm = ttk.Frame(master=self.root, name="body")
+        body_frm.pack(fill=tk.BOTH, expand=True)
+        # 80/20 column split
+        body_frm.columnconfigure(0, weight=9)  # left canvas
+        body_frm.columnconfigure(1, weight=1)  # right playlist
+
+        # image
+        image_frm = ttk.Frame(master=body_frm, name="image")
+        # image_frm.grid(column=0, row=0, sticky="nsew")
+        image_frm.pack(fill=tk.BOTH, expand=True)
+        output_image = tk.Label(image_frm)
+        output_image.pack(fill=tk.BOTH, expand=True)
+        self.tk_output_image = output_image
+        self.image_frm = image_frm
+        # create right playlist frame
+
+        self.body = body_frm  # save body frame
+
+    def gui_create_footer(self) -> None:
+        # info and controls
+        footer_frm = ttk.Frame(master=self.root, name="footer")
+        footer_frm.pack(side=tk.BOTTOM, fill=tk.X)
+
+        # info: progress/slider
+        info_frm = ttk.Frame(master=footer_frm, name="info")
+        info_frm.pack(side=tk.TOP, fill=tk.X)
         # slider
         self.tk_scale = ttk.Scale(
-            progress_frm,
+            info_frm,
             orient=tk.HORIZONTAL,
             from_=1,
             to=100,
             command=self._sync_slider_to_frame,
         )
-        self.tk_scale.grid(row=0, column=3, columnspan=6, sticky="nsew")
+        self.tk_scale.grid(row=0, column=1, columnspan=7, sticky="nsew")
         self.tk_scale.grid_remove()  # hide it first
         # progress bar
         self.tk_progress = ttk.Progressbar(
-            progress_frm,
+            info_frm,
             orient=tk.HORIZONTAL,
             length=100,
             mode="determinate",
             value=0,
             maximum=100,
         )
-        self.tk_progress.grid(row=0, column=3, columnspan=6, sticky="nsew")
-        # zoom
-        glyph = ZOOM_TEXT[self.zoom_idx]
-        self.tk_lbl_zoom = tk.Label(progress_frm, text=f"{glyph}")
-        self.tk_lbl_zoom.grid(row=0, column=9, sticky="nsew")
-        lbl = tk.Label(progress_frm, text="")  # spacer
-        lbl.grid(row=0, column=10, columnspan=2, sticky="nsew")
-        # configure expansion and uniform column sizes
-        num_col, _ = progress_frm.grid_size()
-        for i in range(num_col):
-            progress_frm.grid_columnconfigure(i, weight=1, uniform="tag")
-        self.progress_frm = progress_frm  # save progress/slider frame
+        self.tk_progress.grid(row=0, column=1, columnspan=7, sticky="nsew")
+        # frame number
+        self.tk_lbl_frame_num = tk.Label(info_frm, text="0")
+        self.tk_lbl_frame_num.grid(row=0, column=8)
 
-    def gui_create_footer(self) -> None:
-        """Create footer of control buttons.
-        Use blank tk.Label to guide spacing as Tkinter can't micromanage layout
-        by specifying percentages/pixels.
-        """
-        btn_frm = ttk.Frame(master=self.root)
-        btn_frm.pack(side=tk.BOTTOM, fill=tk.X)
-        # footer contents
-        self.tk_btn_play = ttk.Button(
-            btn_frm, text="Play", command=self.btn_play_stop_press
-        )  # store widget to modifying button text later
-        btn_list: List[Union[ttk.Button, tk.Label]] = [
-            tk.Label(btn_frm, text=""),  # spacer
-            tk.Label(btn_frm, text=""),
-            tk.Label(btn_frm, text=""),
-            self.tk_btn_play,
-            tk.Label(btn_frm, text=""),
-            ttk.Button(btn_frm, text="-", command=self.btn_zoom_out_press),
-            ttk.Button(btn_frm, text="+", command=self.btn_zoom_in_press),
-            tk.Label(btn_frm, text=""),
-            tk.Label(btn_frm, text=""),
-            tk.Label(btn_frm, text=""),
-        ]
-        for i, btn in enumerate(btn_list):
-            # btn.configure(height=2)  # NB: height in text units (N/A to ttk)
-            btn.grid(row=0, column=i, sticky="nsew")
+        lbl = tk.Label(info_frm, text="")  # spacer
+        lbl.grid(row=0, column=9)
+
         # configure expansion and uniform column sizes
-        num_col, _ = btn_frm.grid_size()
+        num_col, _ = info_frm.grid_size()
         for i in range(num_col):
-            btn_frm.grid_columnconfigure(i, weight=1, uniform="tag")
-        self.footer_frm = btn_frm  # save footer frame
+            info_frm.grid_columnconfigure(i, weight=1, uniform="tag")
+        self.info_frm = info_frm  # save info frame
+
+        # controls: buttons
+        controls_frm = ttk.Frame(master=footer_frm, name="controls")
+        controls_frm.pack(side=tk.BOTTOM, fill=tk.X)
+
+        self.tk_btn_play = ttk.Button(
+            controls_frm, text="Play", command=self.btn_play_stop_press
+        )  # store widget to modifying button text later
+        self.tk_btn_play.grid(row=0, column=1)
+        # zoom: - / zoom_factor / +
+        btn_zoom_out = ttk.Button(
+            controls_frm, text="-", command=self.btn_zoom_out_press
+        )
+        self.tk_btn_zoom_out = btn_zoom_out
+        self.tk_btn_zoom_out.grid(row=0, column=5)
+        glyph = ZOOM_TEXT[self.zoom_idx]
+        self.tk_lbl_zoom = tk.Label(controls_frm, text=f"{glyph}")
+        self.tk_lbl_zoom.grid(row=0, column=6)
+        btn_zoom_in = ttk.Button(controls_frm, text="+", command=self.btn_zoom_in_press)
+        self.tk_btn_zoom_in = btn_zoom_in
+        self.tk_btn_zoom_in.grid(row=0, column=7)
+
+        # hide/show playlist button
+        self.btn_hide_show_playlist = ttk.Button(controls_frm, text="Playlist")
+        self.btn_hide_show_playlist.grid(row=0, column=8)
+
+        lbl = tk.Label(controls_frm, text="")  # spacer
+        lbl.grid(row=0, column=9)
+
+        # configure expansion and uniform column sizes
+        num_col, _ = controls_frm.grid_size()
+        for i in range(num_col):
+            controls_frm.grid_columnconfigure(i, weight=1, uniform="tag")
+        self.controls_frm = controls_frm  # save controls frame
+
+        self.footer = footer_frm  # save footer frame
 
     ####################
     #
@@ -372,8 +348,8 @@ class Player:  # pylint: disable=too-many-instance-attributes
     def timer_function(self) -> None:
         """Function to do background processing in Tkinter's way"""
         the_time = time.strftime("%H:%M:%S")
-        self.tk_lbl_timer.config(text=the_time)
-        # self.logger.debug(f"timer function: {the_time}, _state={self._state}")
+        # self.tk_logo.config(text=the_time)
+        # self.logger.info(f"timer function: {the_time}, _state={self.state}")
 
         if self.state == "play":
             # Only two states: 1) playing back video or 2) executing pipeline
@@ -389,12 +365,12 @@ class Player:  # pylint: disable=too-many-instance-attributes
                     self.run_pipeline_one_iteration()
 
         self.root.update()  # wake up GUI
-        self.bkgd_job = self.tk_lbl_timer.after(FPS_60, self.timer_function)
+        self.bkgd_job = self.tk_logo.after(FPS_60, self.timer_function)
 
     def cancel_timer_function(self) -> None:
         """Cancel the background timer function"""
         if self.bkgd_job:
-            self.tk_lbl_timer.after_cancel(self.bkgd_job)
+            self.tk_logo.after_cancel(self.bkgd_job)
             self.bkgd_job = None
 
     ####################
@@ -480,18 +456,18 @@ class Player:  # pylint: disable=too-many-instance-attributes
 
     def _set_header_playing(self) -> None:
         """Change header text to playing..."""
-        self.tk_lbl_header["text"] = f"Playing {self.pipeline_path}"
-        self.tk_lbl_header.config(fg="green")
+        self.tk_lbl_header["text"] = f"Playing {self.pipeline_path.name}"
+        # self.tk_lbl_header.config(fg="green")
 
     def _set_header_running(self) -> None:
         """Change header text to running..."""
-        self.tk_lbl_header["text"] = f"Running {self.pipeline_path}"
-        self.tk_lbl_header.config(fg="red")
+        self.tk_lbl_header["text"] = f"Running {self.pipeline_path.name}"
+        # self.tk_lbl_header.config(fg="red")
 
     def _set_header_stop(self) -> None:
         """Change header text to pipeline pathname"""
-        self.tk_lbl_header["text"] = f"{self.pipeline_path}"
-        self.tk_lbl_header.config(fg="white")
+        self.tk_lbl_header["text"] = f"{self.pipeline_path.name}"
+        # self.tk_lbl_header.config(fg="white")
 
     def _update_slider_and_show_frame(self) -> None:
         """Update slider based on frame index and show new frame"""
