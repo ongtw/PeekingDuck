@@ -17,7 +17,7 @@
 from PIL import ImageTk, Image
 
 
-def load_image(image_path: str, resize_pct: float = 0.25) -> ImageTk.PhotoImage:
+def load_image(image_path: str, resize_pct: float = 1.0) -> ImageTk.PhotoImage:
     """Load and resize an image, 'coz plain vanilla Tkinter doesn't support JPG, PNG
 
     Args:
@@ -27,9 +27,12 @@ def load_image(image_path: str, resize_pct: float = 0.25) -> ImageTk.PhotoImage:
         ImageTk.PhotoImage: the loaded image
     """
     img = Image.open(image_path)
-    width = int(resize_pct * img.size[0])
-    height = int(resize_pct * img.size[1])
-    resized_img = img.resize((width, height))
+    if resize_pct != 1.0:
+        width = int(resize_pct * img.size[0])
+        height = int(resize_pct * img.size[1])
+        resized_img = img.resize((width, height))
+    else:
+        resized_img = img
     the_img = ImageTk.PhotoImage(resized_img)
     return the_img
 

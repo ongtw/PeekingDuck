@@ -14,17 +14,13 @@
 
 """
 Implement PeekingDuck Player
-
-Todo:
-    - handle scenario whereby input image is larger than display widget size,
-      either resize window or resize input image
 """
 
+from ctypes import resize
 from typing import Dict, List, Union
 from pathlib import Path
 import logging
 import platform
-import time
 import tkinter as tk
 from tkinter import ttk
 import copy
@@ -43,18 +39,30 @@ from peekingduck.player.player_utils import (
 ####################
 # Globals
 ####################
+IMAGE_BUTTONS = True
 BUTTON_DELAY: int = 250  # milliseconds (0.25 of a second)
 BUTTON_REPEAT: int = int(1000 / 60)  # milliseconds (60 fps)
 FPS_60: int = int(1000 / 60)  # milliseconds per iteration
 LOGO: str = "peekingduck/player/PeekingDuckLogo.png"
-MIN_HEIGHT: int = 480
-MIN_WIDTH: int = 640
+MIN_HEIGHT: int = 600
+MIN_WIDTH: int = 800
 NUM_PLAYLIST_LINES: int = 20
 WIN_HEIGHT: int = 768
 WIN_WIDTH: int = 1024
 ZOOMS: List[float] = [0.5, 0.75, 1.0, 1.25, 1.50, 2.00, 2.50, 3.00]  # > 3x is slow!
 ZOOM_DEFAULT_IDX: int = 2
 ZOOM_TEXT: List[str] = ["0.5x", "0.75x", "1x", "1.25x", "1.5x", "2x", "2.5x", "3x"]
+# Emojis
+IMG_PLAYLIST: str = "peekingduck/player/btn_playlist.png"
+IMG_PLAY: str = "peekingduck/player/btn_play.png"
+IMG_STOP: str = "peekingduck/player/btn_stop.png"
+IMG_ZOOM_IN: str = "peekingduck/player/btn_zoom_in.png"
+IMG_ZOOM_OUT: str = "peekingduck/player/btn_zoom_out.png"
+EMOJI_PLAY = "\u25B6"
+EMOJI_STOP = "\u23F9"
+EMOJI_MAGNIFYING_GLASS_LEFT = "\U0001F50D"
+EMOJI_MAGNIFYING_GLASS_RIGHT = "\U0001F50E"
+BTN_PAD = 0
 
 
 class Player:  # pylint: disable=too-many-instance-attributes
@@ -103,13 +111,11 @@ class Player:  # pylint: disable=too-many-instance-attributes
         # activate internal timer function and start Tkinter event loop
         self.timer_function()
         self.root.mainloop()
-        # self.root.event_generate("<Configure>", when="tail")
 
     def resize(self, event):
-        # "." is the self.root widget
-        # self.logger.info(f"RESIZE: {event.widget}")
         if str(event.widget) == ".":
-            self.logger.info(
+            # "." is the root widget, i.e. main window resize
+            self.logger.debug(
                 f"resize: widget={event.widget}, h={event.height}, w={event.width}"
             )
 
@@ -143,7 +149,6 @@ class Player:  # pylint: disable=too-many-instance-attributes
         # header top padding
         lbl = tk.Label(header_frm, text="")
         lbl.grid(row=0, column=0)
-        # self.tk_lbl_header_padding = lbl
         # header contents
         logo_path = Path(LOGO)
         self.logger.debug(f"logo={logo_path}, exists={logo_path.exists()}")
@@ -167,16 +172,11 @@ class Player:  # pylint: disable=too-many-instance-attributes
         self.header_frm = header_frm  # save header frame
 
     def gui_create_body(self) -> None:
-        # body_frm = ttk.Frame(master=self.root, relief=tk.RIDGE, borderwidth=3)
         body_frm = ttk.Frame(master=self.root, name="body")
         body_frm.pack(fill=tk.BOTH, expand=True)
-        # 80/20 column split
-        body_frm.columnconfigure(0, weight=9)  # left canvas
-        body_frm.columnconfigure(1, weight=1)  # right playlist
 
         # image
         image_frm = ttk.Frame(master=body_frm, name="image")
-        # image_frm.grid(column=0, row=0, sticky="nsew")
         image_frm.pack(fill=tk.BOTH, expand=True)
         output_image = tk.Label(image_frm)
         output_image.pack(fill=tk.BOTH, expand=True)
@@ -229,28 +229,77 @@ class Player:  # pylint: disable=too-many-instance-attributes
 
         # controls: buttons
         controls_frm = ttk.Frame(master=footer_frm, name="controls")
-        controls_frm.pack(side=tk.BOTTOM, fill=tk.X)
+        controls_frm.pack(side=tk.TOP, fill=tk.X)
 
-        self.tk_btn_play = ttk.Button(
-            controls_frm, text="Play", command=self.btn_play_stop_press
-        )  # store widget to modifying button text later
-        self.tk_btn_play.grid(row=0, column=1)
+        self._img_playlist = load_image(IMG_PLAYLIST, resize_pct=0.1)
+        self._img_play = load_image(IMG_PLAY, resize_pct=0.1)
+        self._img_stop = load_image(IMG_STOP, resize_pct=0.1)
+        self._img_zoom_in = load_image(IMG_ZOOM_IN, resize_pct=0.1)
+        self._img_zoom_out = load_image(IMG_ZOOM_OUT, resize_pct=0.1)
+
+        if IMAGE_BUTTONS:
+            btn_play = tk.Button(
+                controls_frm,
+                image=self._img_play,
+                command=self.btn_play_stop_press,
+                width=80,
+            )
+        else:
+            btn_play = ttk.Button(
+                controls_frm,
+                text="Play",
+                command=self.btn_play_stop_press,
+            )
+        self.tk_btn_play = btn_play
+        self.tk_btn_play.grid(row=0, column=1, sticky="ns")
+
         # zoom: - / zoom_factor / +
-        btn_zoom_out = ttk.Button(
-            controls_frm, text="-", command=self.btn_zoom_out_press
-        )
+        # zoom out button
+        if IMAGE_BUTTONS:
+            btn_zoom_out = tk.Button(
+                controls_frm,
+                image=self._img_zoom_out,
+                command=self.btn_zoom_out_press,
+                width=80,
+            )
+        else:
+            btn_zoom_out = ttk.Button(
+                controls_frm,
+                text="-",
+                command=self.btn_zoom_out_press,
+            )
         self.tk_btn_zoom_out = btn_zoom_out
-        self.tk_btn_zoom_out.grid(row=0, column=5)
+        self.tk_btn_zoom_out.grid(row=0, column=5, sticky="ns")
+        # zoom factor number
         glyph = ZOOM_TEXT[self.zoom_idx]
         self.tk_lbl_zoom = tk.Label(controls_frm, text=f"{glyph}")
-        self.tk_lbl_zoom.grid(row=0, column=6)
-        btn_zoom_in = ttk.Button(controls_frm, text="+", command=self.btn_zoom_in_press)
+        self.tk_lbl_zoom.grid(row=0, column=6, sticky="ns")
+        # zoom in button
+        if IMAGE_BUTTONS:
+            btn_zoom_in = tk.Button(
+                controls_frm,
+                image=self._img_zoom_in,
+                command=self.btn_zoom_in_press,
+                width=80,
+            )
+        else:
+            btn_zoom_in = ttk.Button(
+                controls_frm,
+                text="+",
+                command=self.btn_zoom_in_press,
+            )
         self.tk_btn_zoom_in = btn_zoom_in
-        self.tk_btn_zoom_in.grid(row=0, column=7)
+        self.tk_btn_zoom_in.grid(row=0, column=7, sticky="ns")
 
         # hide/show playlist button
-        self.btn_hide_show_playlist = ttk.Button(controls_frm, text="Playlist")
-        self.btn_hide_show_playlist.grid(row=0, column=8)
+        if IMAGE_BUTTONS:
+            btn_hide_show_playlist = tk.Button(
+                controls_frm, image=self._img_playlist, width=80, relief=tk.RIDGE
+            )
+        else:
+            btn_hide_show_playlist = ttk.Button(controls_frm, text="Playlist")
+        self.btn_hide_show_playlist = btn_hide_show_playlist
+        self.btn_hide_show_playlist.grid(row=0, column=8, sticky="ns")
 
         lbl = tk.Label(controls_frm, text="")  # spacer
         lbl.grid(row=0, column=9)
@@ -260,6 +309,32 @@ class Player:  # pylint: disable=too-many-instance-attributes
         for i in range(num_col):
             controls_frm.grid_columnconfigure(i, weight=1, uniform="tag")
         self.controls_frm = controls_frm  # save controls frame
+
+        # spacer below footer
+        lbl = tk.Label(footer_frm, text="")  # spacer below footer
+        lbl.pack(side=tk.TOP)
+
+        # status bar
+        status_frm = ttk.Frame(master=footer_frm, name="status")
+        status_frm.pack(side=tk.TOP, fill=tk.X)
+        lbl = tk.Label(status_frm, text="")  # spacer
+        lbl.grid(row=0, column=0)
+        self.status_bar = tk.Label(
+            master=status_frm,
+            anchor=tk.W,
+            text="This is the PeekingDuck Player status bar",
+        )
+        self.status_bar.grid(row=0, column=1, columnspan=8, sticky="we")
+        lbl = tk.Label(status_frm, text="")  # spacer
+        lbl.grid(row=0, column=9)
+        # configure expansion and uniform column sizes
+        num_col, _ = status_frm.grid_size()
+        for i in range(num_col):
+            status_frm.grid_columnconfigure(i, weight=1, uniform="tag")
+        self.status_frm = status_frm
+
+        lbl = tk.Label(footer_frm, text="")  # spacer below footer
+        lbl.pack(side=tk.TOP)
 
         self.footer = footer_frm  # save footer frame
 
@@ -347,10 +422,6 @@ class Player:  # pylint: disable=too-many-instance-attributes
     #
     def timer_function(self) -> None:
         """Function to do background processing in Tkinter's way"""
-        the_time = time.strftime("%H:%M:%S")
-        # self.tk_logo.config(text=the_time)
-        # self.logger.info(f"timer function: {the_time}, _state={self.state}")
-
         if self.state == "play":
             # Only two states: 1) playing back video or 2) executing pipeline
             if self.is_output_playback:
@@ -399,10 +470,8 @@ class Player:  # pylint: disable=too-many-instance-attributes
         if self.frames:
             frame = self.frames[self.frame_idx]
             frame = self._apply_zoom(frame)
-            # self.logger.debug(f"show_frame {self.frame_idx} size={frame.shape}")
             img_arr = Image.fromarray(frame)
             img_tk = ImageTk.PhotoImage(img_arr)
-            # self.logger.debug(f"img_tk: {img_tk.width()}x{img_tk.height()}")
             self._img_tk = img_tk  # save to avoid python GC
             self.tk_output_image.config(image=img_tk)
 
@@ -415,17 +484,14 @@ class Player:  # pylint: disable=too-many-instance-attributes
         Returns:
             np.ndarray: the zoomed image
         """
-        # logger.debug(f"zoom_idx={self.zoom_idx}")
         if self.zoom_idx != ZOOM_DEFAULT_IDX:
             # zoom image
             zoom = ZOOMS[self.zoom_idx]
-            # logger.debug(f"img.shape = {img.shape}, zoom = {zoom}")
             new_size = (
                 int(frame.shape[0] * zoom),
                 int(frame.shape[1] * zoom),
                 frame.shape[2],
             )
-            # logger.debug(f"zoom image to {new_size}")
             # note: opencv is faster than scikit-image!
             frame = cv2.resize(frame, (new_size[1], new_size[0]))
         return frame
@@ -457,17 +523,14 @@ class Player:  # pylint: disable=too-many-instance-attributes
     def _set_header_playing(self) -> None:
         """Change header text to playing..."""
         self.tk_lbl_header["text"] = f"Playing {self.pipeline_path.name}"
-        # self.tk_lbl_header.config(fg="green")
 
     def _set_header_running(self) -> None:
         """Change header text to running..."""
         self.tk_lbl_header["text"] = f"Running {self.pipeline_path.name}"
-        # self.tk_lbl_header.config(fg="red")
 
     def _set_header_stop(self) -> None:
         """Change header text to pipeline pathname"""
         self.tk_lbl_header["text"] = f"{self.pipeline_path.name}"
-        # self.tk_lbl_header.config(fg="white")
 
     def _update_slider_and_show_frame(self) -> None:
         """Update slider based on frame index and show new frame"""
@@ -500,6 +563,14 @@ class Player:  # pylint: disable=too-many-instance-attributes
         self.tk_scale.grid()  # show slider
         self.tk_scale.configure(to=len(self.frames))
         self._sync_slider_to_frame(self.tk_scale.get())
+
+    def _set_status_text(self, text: str) -> None:
+        """Set the status bar text to given text string
+
+        Args:
+            text (str): the status bar text string
+        """
+        self.status_bar["text"] = text
 
     ####################
     #
@@ -576,6 +647,7 @@ class Player:  # pylint: disable=too-many-instance-attributes
         self._pipeline: Pipeline = self._node_loader.get_pipeline()
         self._set_header_running()
         self.set_player_state_to_play()
+        self._set_status_text(self.pipeline_path)
         self.is_pipeline_running = True
 
     def stop_pipeline_run(self) -> None:
@@ -614,9 +686,15 @@ class Player:  # pylint: disable=too-many-instance-attributes
     def set_player_state_to_play(self) -> None:
         """Set self state to play for either 1) pipeline execution or 2) playback"""
         self.state = "play"
-        self.tk_btn_play["text"] = "Stop"
+        if IMAGE_BUTTONS:
+            self.tk_btn_play["image"] = self._img_stop
+        else:
+            self.tk_btn_play["text"] = "Stop"
 
     def set_player_state_to_stop(self) -> None:
         """Set self state to stop"""
         self.state = "stop"
-        self.tk_btn_play["text"] = "Play"
+        if IMAGE_BUTTONS:
+            self.tk_btn_play["image"] = self._img_play
+        else:
+            self.tk_btn_play["text"] = "Play"
