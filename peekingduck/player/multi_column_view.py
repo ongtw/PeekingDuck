@@ -30,12 +30,12 @@ def sort_playlist(tree: ttk.Treeview, col: str, descending: bool) -> None:
 
 
 class MultiColumnPlayListView(object):
-    """Use ttk.TreeView as a multi-column listbox"""
+    """Use ttk.TreeView as multi-column list view"""
 
     def __init__(self, data: List, header: List):
-        self.tree = None
         self.data = data
         self.header = header
+        self.view = None
         self._create_tk_widgets()
         self._make_view()
 
@@ -43,11 +43,11 @@ class MultiColumnPlayListView(object):
         container = ttk.Frame()
         container.pack(fill="both", expand=True)
         # create treeview with dual scrollbars
-        self.tree = ttk.Treeview(columns=self.header, show="headings")
-        vsb = ttk.Scrollbar(orient="vertical", command=self.tree.yview)
-        hsb = ttk.Scrollbar(orient="horizontal", command=self.tree.xview)
-        self.tree.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
-        self.tree.grid(column=0, row=0, sticky="nsew", in_=container)
+        self.view = ttk.Treeview(columns=self.header, show="headings")
+        vsb = ttk.Scrollbar(orient="vertical", command=self.view.yview)
+        hsb = ttk.Scrollbar(orient="horizontal", command=self.view.xview)
+        self.view.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
+        self.view.grid(column=0, row=0, sticky="nsew", in_=container)
         vsb.grid(column=1, row=0, sticky="ns", in_=container)
         hsb.grid(column=0, row=1, sticky="ew", in_=container)
         container.grid_columnconfigure(0, weight=1)
@@ -56,18 +56,18 @@ class MultiColumnPlayListView(object):
     def _make_view(self):
         font_measure = tkFont.Font().measure
         for col in self.header:
-            self.tree.heading(
+            self.view.heading(
                 col,
                 text=col.title(),
-                command=lambda c=col: sort_playlist(self.tree, c, False),
+                command=lambda c=col: sort_playlist(self.view, c, False),
             )
             # fit column width
-            self.tree.column(col, width=font_measure(col.title()))
+            self.view.column(col, width=font_measure(col.title()))
 
         for item in self.data:
-            self.tree.insert("", "end", values=item)
+            self.view.insert("", "end", values=item)
             # fit column width
             for i, val in enumerate(item):
                 col_width = font_measure(val)
-                if self.tree.column(self.header[i], width=None) < col_width:
-                    self.tree.column(self.header[i], width=col_width)
+                if self.view.column(self.header[i], width=None) < col_width:
+                    self.view.column(self.header[i], width=col_width)
