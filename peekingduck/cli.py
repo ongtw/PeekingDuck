@@ -321,10 +321,10 @@ def run(  # pylint: disable=too-many-arguments
             config_path = curr_dir / "run_config.yml"
         else:
             config_path = curr_dir / "pipeline_config.yml"
-    else:
-        # if config_path is just "some_file.yml", expand it to full path
-        if (curr_dir / config_path).is_file():
-            config_path = curr_dir / config_path
+    # else:
+    #     # if config_path is just "some_file.yml", expand it to full path
+    #     if (curr_dir / config_path).is_file():
+    #         config_path = curr_dir / config_path
     pipeline_config_path = Path(config_path)
 
     if player:
