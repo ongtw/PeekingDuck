@@ -205,16 +205,9 @@ class PlayList:
         pipeline_path = Path(pipeline)
         file_exist = False  # file exist flag
         mod_datetime = None  # last modified date/time
+
         if pipeline_path.exists():
             file_exist = True
             mod_datetime = pipeline_path.stat().st_mtime
-            # mod_datetime = datetime.fromtimestamp(mod_time).strftime(
-            #     "%Y-%m-%d-%H:%M:%S"
-            # )
-
-        # self._pipeline_stats[pipeline] = {
-        #     "exist": file_exist,
-        #     "mtime": mod_datetime,
-        # }
 
         return PipelineStats(pipeline_path, file_exist, mod_datetime)
