@@ -16,13 +16,12 @@
 Implement PeekingDuck Player
 """
 
-from ctypes import resize
 from typing import Dict, List, Union
 from pathlib import Path
 import logging
 import platform
 import tkinter as tk
-from tkinter import ttk
+import tkinter.ttk as ttk
 import copy
 import cv2
 import numpy as np
@@ -30,16 +29,18 @@ from PIL import ImageTk, Image
 from peekingduck.declarative_loader import DeclarativeLoader
 from peekingduck.pipeline.pipeline import Pipeline
 from peekingduck.player.playlist import PlayList
+from peekingduck.player.multi_column_view import MultiColumnPlayListView
+from peekingduck.player.single_column_view import SingleColumnPlayListView
 from peekingduck.player.player_utils import (
-    load_image,
     get_keyboard_char,
     get_keyboard_modifier,
+    load_image,
 )
 
 ####################
 # Globals
 ####################
-IMAGE_BUTTONS = True
+IMAGE_BUTTONS = False
 BUTTON_DELAY: int = 250  # milliseconds (0.25 of a second)
 BUTTON_REPEAT: int = int(1000 / 60)  # milliseconds (60 fps)
 FPS_60: int = int(1000 / 60)  # milliseconds per iteration
@@ -84,6 +85,7 @@ class Player:  # pylint: disable=too-many-instance-attributes
         self.home_path = Path.home()
         self.playlist = PlayList(self.home_path)
         self.playlist.load_playlist_file()
+        self.playlist.add_pipeline(pipeline_path)
         # for PeekingDuck pipeline run/playback
         self.frames: List[np.ndarray] = []
         self.frame_idx: int = -1
@@ -172,19 +174,26 @@ class Player:  # pylint: disable=too-many-instance-attributes
         self.header_frm = header_frm  # save header frame
 
     def gui_create_body(self) -> None:
-        body_frm = ttk.Frame(master=self.root, name="body")
-        body_frm.pack(fill=tk.BOTH, expand=True)
+        # playlist frame (right)
+        playlist_frm = ttk.Frame(
+            master=self.root, name="playlist", relief=tk.RIDGE, borderwidth=1
+        )
+        playlist_frm.pack(side=tk.RIGHT, fill=tk.Y)
+        self.tk_playlist_frm = playlist_frm
+        self.tk_playlist_view = SingleColumnPlayListView(
+            playlist=self.playlist, root=playlist_frm
+        )
 
-        # image
-        image_frm = ttk.Frame(master=body_frm, name="image")
-        image_frm.pack(fill=tk.BOTH, expand=True)
+        self.playlist_show = True
+        # image (left)
+        image_frm = ttk.Frame(master=self.root, name="image")
+        image_frm.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         output_image = tk.Label(image_frm)
         output_image.pack(fill=tk.BOTH, expand=True)
         self.tk_output_image = output_image
         self.image_frm = image_frm
-        # create right playlist frame
 
-        self.body = body_frm  # save body frame
+        self.btn_hide_show_playlist_press()  # first toggle to hide playlist
 
     def gui_create_footer(self) -> None:
         # info and controls
@@ -294,10 +303,16 @@ class Player:  # pylint: disable=too-many-instance-attributes
         # hide/show playlist button
         if IMAGE_BUTTONS:
             btn_hide_show_playlist = tk.Button(
-                controls_frm, image=self._img_playlist, width=80, relief=tk.RIDGE
+                controls_frm,
+                image=self._img_playlist,
+                width=80,
+                relief=tk.RIDGE,
+                command=self.btn_hide_show_playlist_press,
             )
         else:
-            btn_hide_show_playlist = ttk.Button(controls_frm, text="Playlist")
+            btn_hide_show_playlist = ttk.Button(
+                controls_frm, text="Playlist", command=self.btn_hide_show_playlist_press
+            )
         self.btn_hide_show_playlist = btn_hide_show_playlist
         self.btn_hide_show_playlist.grid(row=0, column=8, sticky="ns")
 
@@ -343,6 +358,28 @@ class Player:  # pylint: disable=too-many-instance-attributes
     # Tk Event Handlers
     #
     ####################
+    def btn_hide_show_playlist_press(self) -> None:
+        """Handle Hide/Show Playlist button
+
+        dotw technotes:
+            - Behavior:
+                Playlist on right is fixed width.  When image is expanded, it should not
+                cover playlist.  But when playlist is hidden and revealed, the expanding
+                image will cover playlist
+            - To fix above, need to
+              a) also pack_forget() the image frame, along with the playlist frame
+              b) when revealing playlist, pack() playlist first, then pack() image
+              c) now the expanding image will not cover the playlist
+        """
+        if self.playlist_show:
+            self.tk_playlist_frm.pack_forget()
+        else:
+            self.image_frm.pack_forget()
+            self.tk_playlist_frm.pack(side=tk.RIGHT, fill=tk.Y)
+            self.tk_playlist_view.reset()
+            self.image_frm.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        self.playlist_show = not self.playlist_show
+
     def btn_play_stop_press(self) -> None:
         """Handle Play/Stop button"""
         self.logger.debug(f"btn_play_stop_press start: self._state={self.state}")
@@ -413,6 +450,8 @@ class Player:  # pylint: disable=too-many-instance-attributes
 
     def on_exit(self) -> None:
         """Handle quit player event"""
+        self.logger.info("saving playlist")
+        self.playlist.save_playlist_file()
         self.logger.info("quitting player")
         self.cancel_timer_function()
         self.root.destroy()
