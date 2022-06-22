@@ -130,17 +130,26 @@ class PlayList:
         return self._pipeline_stats[pipeline]
 
     def add_pipeline(self, pipeline_path: Union[Path, str]) -> None:
-        """Add pipeline yaml file to playlist
+        """Add pipeline yaml file to playlist.
+           Do nothing if pipeline is already in playlist.
 
         Args:
             pipeline_path (Union[Path, str]): path of yaml file to add
         """
+        is_abs = Path(pipeline_path).is_absolute()
+        self.logger.info(f"add_pipeline: {pipeline_path}, is_abs={is_abs}")
+        if not is_abs:
+            resolved_path = Path(pipeline_path).resolve()
+            self.logger.info(f"resolved_path: {resolved_path}")
+            pipeline_path = resolved_path
+
         pipeline_str = str(pipeline_path)
-        if pipeline_path in self:
-            raise ValueError(f"Error adding existing {pipeline_path}")
-        # add new pipeline and stats
-        self._pipeline_list.append(pipeline_str)
-        self._pipeline_stats[pipeline_str] = self._make_pipeline_stats(pipeline_str)
+        if pipeline_str in self:
+            self.logger.info(f"{pipeline_str} is in playlist")
+        else:
+            # add new pipeline and stats
+            self._pipeline_list.append(pipeline_str)
+            self._pipeline_stats[pipeline_str] = self._make_pipeline_stats(pipeline_str)
 
     def remove_pipeline(self, pipeline_path: Union[Path, str]) -> None:
         """Remove pipeline yaml file from playlist
