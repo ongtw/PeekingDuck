@@ -67,13 +67,13 @@ class TestPlayList:
         files = get_files(home_path / ".peekingduck")
         print(f"files={files}")
 
-        print_file(playlist_a.playlist_path)
+        print_file(playlist_a._playlist_path)
 
         playlist_a.add_pipeline(pipeline_2)
         playlist_a.add_pipeline(pipeline_3)
         playlist_a.save_playlist_file()
 
-        print_file(playlist_a.playlist_path)
+        print_file(playlist_a._playlist_path)
 
         print(f"Playlist A:\n{playlist_a}")
 
@@ -105,16 +105,17 @@ class TestPlayList:
         home_path = Path.cwd()
         print(f"home_path={home_path}")
         playlist = PlayList(home_path)
-
         pipeline_1 = home_path / "src" / "pkd_pipeline1.yml"
 
         playlist.add_pipeline(pipeline_1)
-        with pytest.raises(ValueError) as exc_info:
-            playlist.add_pipeline(pipeline_1)
-        print(f"** exc_info\n{exc_info.value}")
-        assert "Error adding" in str(exc_info.value)
+        len_prior = len(playlist)
 
-    def test_playlist_remove_one_pipeline(self):
+        playlist.add_pipeline(pipeline_1)
+        len_after = len(playlist)
+        # no change in playlist after adding duplicate pipeline
+        assert len_prior == len_after
+
+    def test_playlist_delete_one_pipeline(self):
         print("---")
         home_path = Path.cwd()
         print(f"home_path={home_path}")
@@ -126,11 +127,11 @@ class TestPlayList:
         assert pipeline_1 in playlist
         # print(f"Playlist after add 1:\n{playlist}")
 
-        playlist.remove_pipeline(pipeline_1)
+        playlist.delete_pipeline(pipeline_1)
         assert pipeline_1 not in playlist
-        # print(f"Playlist after remove 1:\n{playlist}")
+        # print(f"Playlist after delete 1:\n{playlist}")
 
-    def test_playlist_remove_non_existent_pipeline(self):
+    def test_playlist_delete_non_existent_pipeline(self):
         print("---")
         home_path = Path.cwd()
         print(f"home_path={home_path}")
@@ -140,12 +141,14 @@ class TestPlayList:
         pipeline_2 = home_path / "src" / "pkd_pipeline2.yml"
 
         playlist.add_pipeline(pipeline_1)
-        with pytest.raises(ValueError) as exc_info:
-            playlist.remove_pipeline(pipeline_2)
-        print(f"** exc_info\n{exc_info.value}")
-        assert "Error removing" in str(exc_info.value)
+        len_prior = len(playlist)
 
-    def test_playlist_add_and_remove_pipelines(self):
+        playlist.delete_pipeline(pipeline_2)
+        len_after = len(playlist)
+        # no change in playlist after deleting non-existent pipeline
+        assert len_prior == len_after
+
+    def test_playlist_add_and_delete_pipelines(self):
         print("---")
         home_path = Path.cwd()
         print(f"home_path={home_path}")
@@ -166,41 +169,17 @@ class TestPlayList:
         assert pipeline_2 in playlist
         assert pipeline_1 in playlist
 
-        playlist.remove_pipeline(pipeline_1)
-        print(f"Playlist after remove 1:\n{playlist}")
+        playlist.delete_pipeline(pipeline_1)
+        print(f"Playlist after delete 1:\n{playlist}")
         assert pipeline_1 not in playlist
         assert pipeline_2 in playlist
         assert pipeline_3 in playlist
 
-        playlist.remove_pipeline(pipeline_3)
-        print(f"Playlist after remove 3:\n{playlist}")
+        playlist.delete_pipeline(pipeline_3)
+        print(f"Playlist after delete 3:\n{playlist}")
         assert pipeline_1 not in playlist
         assert pipeline_2 in playlist
         assert pipeline_3 not in playlist
-
-    def test_playlist_get_and_set_pipelines(self):
-        print("---")
-        home_path = Path.cwd()
-        print(f"home_path={home_path}")
-        pipeline_1 = home_path / "src" / "pkd_pipeline1.yml"
-        pipeline_2 = home_path / "src" / "pkd_pipeline2.yml"
-        pipeline_3 = home_path / "src" / "pkd_pipeline3.yml"
-        pipeline_4 = home_path / "src" / "pkd_pipeline4.yml"
-
-        playlist = PlayList(home_path)
-        playlist.add_pipeline(pipeline_1)
-        playlist.add_pipeline(pipeline_2)
-        playlist.add_pipeline(pipeline_3)
-
-        print(f"Playlist:\n{playlist}")
-        assert str(pipeline_3) == playlist[2]
-
-        playlist[1] = str(pipeline_4)
-
-        print(f"Playlist:\n{playlist}")
-
-        assert pipeline_2 not in playlist
-        assert pipeline_4 in playlist
 
     def test_playlist_iteration(self):
         print("---")
