@@ -16,16 +16,20 @@
 PeekingDuck Player GUI Creation Code
 """
 
-from __future__ import annotations
-from typing import TYPE_CHECKING
+#
+# dotw technotes:
+#   using __future__ and TYPE_CHECKING works with pylint 2.10.x but fails with 2.7.x
+#
+# from __future__ import annotations
+# from typing import TYPE_CHECKING
 from pathlib import Path
 import tkinter as tk
 from tkinter import ttk
 from peekingduck.player.player_utils import load_image
 from peekingduck.player.single_column_view import SingleColumnPlayListView
 
-if TYPE_CHECKING:
-    from peekingduck.player.player import Player
+# if TYPE_CHECKING:
+#     from peekingduck.player.player import Player
 
 # VIEW_TYPE = "Single"
 IMAGE_BUTTONS = False
@@ -45,7 +49,7 @@ WIN_WIDTH: int = 1280
 #
 # Tk GUI Main Window Creation Code
 #
-def gui_create_window(player: Player) -> None:
+def gui_create_window(player) -> None:  # type: ignore
     """Create the PeekingDuck Player Tkinter window and frames"""
     root = tk.Tk()
     root.wm_protocol("WM_DELETE_WINDOW", player.on_exit)
@@ -72,7 +76,7 @@ def gui_create_window(player: Player) -> None:
 # - Body
 # - Footer
 #
-def gui_create_header(player: Player) -> None:
+def gui_create_header(player) -> None:  # type: ignore
     """Create header with logo and pipeline info text"""
     header_frm = ttk.Frame(master=player.root, name="header")
     header_frm.pack(side=tk.TOP, fill=tk.X)
@@ -102,7 +106,7 @@ def gui_create_header(player: Player) -> None:
     player.header_frm = header_frm  # save header frame
 
 
-def gui_create_body(player: Player) -> None:
+def gui_create_body(player) -> None:  # type: ignore
     """Create body with left video image and right playlist"""
     body_frm = ttk.Frame(master=player.root)
     body_frm.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=40)
@@ -144,7 +148,7 @@ def gui_create_body(player: Player) -> None:
     player.btn_hide_show_playlist_press()  # first toggle to hide playlist
 
 
-def gui_create_footer(player: Player) -> None:
+def gui_create_footer(player) -> None:  # type: ignore
     """Create footer with progress bar/slider and control buttons"""
     # info and controls
     footer_frm = ttk.Frame(master=player.root, name="footer")
@@ -165,7 +169,7 @@ def gui_create_footer(player: Player) -> None:
 # - Progress bar / Slider
 # - Status bar
 #
-def gui_create_control_buttons(player: Player) -> None:
+def gui_create_control_buttons(player) -> None:  # type: ignore
     """Create buttons"""
     controls_frm = ttk.Frame(master=player.footer_frm, name="controls")
     controls_frm.pack(side=tk.TOP, fill=tk.X)
@@ -224,7 +228,7 @@ def gui_create_control_buttons(player: Player) -> None:
         controls_frm.grid_columnconfigure(i, weight=1, uniform="tag")
 
 
-def gui_create_progress_slider(player: Player) -> None:
+def gui_create_progress_slider(player) -> None:  # type: ignore
     """Create progress bar and slider overlaid on each other"""
     info_frm = ttk.Frame(master=player.footer_frm, name="info")
     info_frm.pack(side=tk.TOP, fill=tk.X)
@@ -262,7 +266,7 @@ def gui_create_progress_slider(player: Player) -> None:
     player.info_frm = info_frm  # save info frame
 
 
-def gui_create_statusbar(player: Player) -> None:
+def gui_create_statusbar(player) -> None:  # type: ignore
     """Create status bar at bottom of window"""
     status_frm = ttk.Frame(master=player.footer_frm, name="status")
     status_frm.pack(side=tk.TOP, fill=tk.X)
