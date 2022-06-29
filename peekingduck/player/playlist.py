@@ -104,6 +104,8 @@ class PlayList:
         raise StopIteration
 
     def __contains__(self, item: str) -> bool:
+        if not isinstance(item, str):
+            item = str(item)
         res = False
         for pipeline_stats in self.pipeline_stats:
             if pipeline_stats.pipeline == item:
