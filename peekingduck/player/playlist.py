@@ -27,9 +27,10 @@ PKD_PLAYLIST_FILE = "playlist.yaml"
 
 
 class PipelineStats:
-    """Implements the Pipeline Stats class to store pipeline-related information."""
+    """Implements immutable PipelineStats class to store pipeline-related information."""
 
     def __init__(self, pipeline: str) -> None:
+        self._hash = hash(pipeline)
         self._pipeline = pipeline
         pipeline_path = Path(pipeline)
         self._name = pipeline_path.name
@@ -39,6 +40,9 @@ class PipelineStats:
 
     def __eq__(self, obj: "PipelineStats") -> bool:
         return self._pipeline == obj._pipeline
+
+    def __hash__(self) -> int:
+        return self._hash
 
     def __lt__(self, obj: "PipelineStats") -> bool:
         return (self._name, self._pipeline) < (obj._name, obj._pipeline)
