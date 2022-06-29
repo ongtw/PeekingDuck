@@ -117,6 +117,9 @@ class PlayList:
     def __getitem__(self, key: str) -> PipelineStats:
         return self._pipelines_dict[key]
 
+    def __len__(self) -> int:
+        return len(self.pipeline_stats)
+
     #
     # Internal methods
     #
