@@ -19,7 +19,7 @@ Tests for draw instance mask node.
 import cv2
 import numpy as np
 import pytest
-from skimage.measure import compare_ssim as ssim
+from skimage.metrics import structural_similarity as ssim
 import yaml
 
 from peekingduck.pipeline.nodes.draw.instance_mask import Node
